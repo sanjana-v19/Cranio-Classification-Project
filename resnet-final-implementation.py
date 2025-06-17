@@ -24,9 +24,7 @@ from sklearn.model_selection import train_test_split
 
 warnings.filterwarnings("ignore")
 
-# -----------------------------
-# Data Loading and Augmentation
-# -----------------------------
+# Data Loading 
 
 def load_data(data_dir, max_samples=10):
     classes = ['SagittalasNifti', 'MetopicsNifti', 'NormalNifti']
@@ -38,6 +36,7 @@ def load_data(data_dir, max_samples=10):
                 data.append({"image": os.path.join(cls_folder, fname), "label": label})
     return data
 
+# Transformations 
 def get_transforms(train=True):
     transforms = [
         LoadImaged(keys=["image"]),
@@ -80,9 +79,7 @@ def split_dataset_stratified(data, train_frac=0.8, val_frac=0.1):
     return train_data, val_data, test_data
 
 
-# -----------------------------
-# Model Definition
-# -----------------------------
+# Model Definition 
 
 def get_model():
     return resnet18(
@@ -94,11 +91,8 @@ def get_model():
 
     return model
 
-# -----------------------------
-# Training Loop
-# -----------------------------
 
-
+# Training 
 
 def train(data_dir, model_path="model.pth"):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -112,9 +106,9 @@ def train(data_dir, model_path="model.pth"):
     test_ds = Dataset(data=test_data, transform=get_transforms(train=False))
 
 
-    train_loader = DataLoader(train_ds, batch_size=8, shuffle=True, num_workers=4, pin_memory=True)
-    val_loader = DataLoader(val_ds, batch_size=8, num_workers=4, pin_memory=True)
-    test_loader = DataLoader(test_ds, batch_size=8, num_workers=4, pin_memory=True)
+    train_loader = DataLoader(train_ds, batch_size=4, shuffle=True, num_workers=4, pin_memory=True)
+    val_loader = DataLoader(val_ds, batch_size=4, num_workers=4, pin_memory=True)
+    test_loader = DataLoader(test_ds, batch_size=4, num_workers=4, pin_memory=True)
 
     model = get_model().to(device)
     criterion = nn.CrossEntropyLoss()
@@ -201,10 +195,7 @@ def compute_metrics(y_true, y_pred):
     return precision, recall, f1
 
 
-# -----------------------------
 # GradCAM
-# -----------------------------
-
 class GradCAM3D:
     def __init__(self, model, target_layer):
         self.model = model
@@ -261,7 +252,7 @@ def apply_gradcam(model_path, val_ds, output_dir="gradcam_output-new"):
     for i, sample in enumerate(val_ds):
         label = sample["label"]
         
-        # If we've already processed this class, skip it
+      
         if label in seen_classes:
             continue
         
@@ -275,7 +266,7 @@ def apply_gradcam(model_path, val_ds, output_dir="gradcam_output-new"):
         input_image = sample['image'].unsqueeze(0).to(device)  
         cam_output = grad_cam.generate_cam(input_image, class_idx=label)
 
-        # Retrieve the original NIfTI image (to get its dimensions)
+        # Retrieve the original NIfTI image (to get dimensions)
         original_nii = nib.load(sample["image"].meta['filename_or_obj'])
         original_data = original_nii.get_fdata() 
         original_shape = original_data.shape  
@@ -283,14 +274,14 @@ def apply_gradcam(model_path, val_ds, output_dir="gradcam_output-new"):
         # Resize Grad-CAM output to match the original NIfTI image dimensions
         cam_output_resized = np.resize(cam_output, original_shape)
 
-        # Save the NIfTI file (Grad-CAM image)
+        # Save the Grad CAM image 
         nii_path = os.path.join(output_dir, f"gradcam_{class_names[label]}_{i}.nii.gz")
         nib.save(nib.Nifti1Image(cam_output, affine=np.eye(4)), nii_path)
 
         # Create and save the overlay slice image
         mid_slice = cam_output.shape[0] // 2
         cam_slice = cam_output[mid_slice]
-        img_slice = input_image.cpu().numpy()[0, 0, mid_slice]  # Get the middle slice of the image
+        img_slice = input_image.cpu().numpy()[0, 0, mid_slice]  
         img_slice_norm = (img_slice - img_slice.min()) / (img_slice.max() - img_slice.min() + 1e-8)
 
         # Apply heatmap and overlay
@@ -310,7 +301,7 @@ def apply_gradcam(model_path, val_ds, output_dir="gradcam_output-new"):
 
         print(f"Saved Grad-CAM for class {class_names[label]} to {overlay_path}")
 
-        # Stop once we've processed one sample for each class
+       
         if len(seen_classes) == 3:
             break
 
